@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.log4j.Logger;
+import redis.clients.jedis.Jedis;
 
 public class HandleSteal {
 	private String url_steal = "https://weixin.spdbccc.com.cn/wxrp-page-steal/stealFlover";
@@ -21,37 +22,131 @@ public class HandleSteal {
 	private static Logger logger = Logger.getLogger(HandleSteal.class);
 	private int userIndex = 1;
 	private int mode = 1;
-	private int modeTime = 175;
-	private long exeBefore = 1270;
-
+	private int delayMax = 450;
+	private int delayMax2 = 600;
+	private int modeTime = 180;
+	private int exeBefore=1280;
 	private int delayCompare = 270;
 	private int beforeCompare = 1255;
+	private int delayCompare2 = 480;
+	private int beforeCompare2 = 1280;
+	private int before = 1280;
 
-	public ArrayList<PersonalPacket> getPersonalPackets() {
-		return personalPackets;
+	public int getDelayMax() {
+		return delayMax;
 	}
 
-	public void setPersonalPackets(ArrayList<PersonalPacket> personalPackets) {
-		this.personalPackets = personalPackets;
+	public void setDelayMax(int delayMax) {
+		this.delayMax = delayMax;
 	}
 
-	public HandleSteal(int userIndex,int mode,int modeTime,int delayCompare,int beforeCompare) {
+	public int getDelayMax2() {
+		return delayMax2;
+	}
+
+	public void setDelayMax2(int delayMax2) {
+		this.delayMax2 = delayMax2;
+	}
+
+	public int getModeTime() {
+		return modeTime;
+	}
+
+	public void setModeTime(int modeTime) {
+		this.modeTime = modeTime;
+	}
+
+	public int getDelayCompare() {
+		return delayCompare;
+	}
+
+	public void setDelayCompare(int delayCompare) {
+		this.delayCompare = delayCompare;
+	}
+
+	public int getBeforeCompare() {
+		return beforeCompare;
+	}
+
+	public void setBeforeCompare(int beforeCompare) {
+		this.beforeCompare = beforeCompare;
+	}
+
+	public int getDelayCompare2() {
+		return delayCompare2;
+	}
+
+	public void setDelayCompare2(int delayCompare2) {
+		this.delayCompare2 = delayCompare2;
+	}
+
+	public int getBeforeCompare2() {
+		return beforeCompare2;
+	}
+
+	public void setBeforeCompare2(int beforeCompare2) {
+		this.beforeCompare2 = beforeCompare2;
+	}
+
+	public int getBefore() {
+		return before;
+	}
+
+	public void setBefore(int before) {
+		this.before = before;
+	}
+
+	public int getMode() {
+		return mode;
+	}
+
+	public void setMode(int mode) {
+		this.mode = mode;
+	}
+
+	public HandleSteal(int userIndex) {
 		super();
 		this.userIndex  = userIndex;
-		this.mode = mode;
-		this.modeTime = modeTime;
-
-		this.delayCompare = delayCompare;
-		this.beforeCompare = beforeCompare;
-		
 		httpClientUtil = new HttpClientUtil();
 		initHttpHead(); // 初始化 http 请求头
 		readPostFlowers(); // 读取最新花朵信息
 	}
 
+	public void initCounterFromRedis(){
+		try {
+			Jedis jedis = new Jedis("localhost", 6379);
+			jedis.select(2);
+			int mode = Integer.parseInt(jedis.get("mode"));
+			int modeTime = Integer.parseInt(jedis.get("modeTime"));
+			int delayCompare = Integer.parseInt(jedis.get("delayCompare"));
+			int beforeCompare = Integer.parseInt(jedis.get("beforeCompare"));
+			int delayMax = Integer.parseInt(jedis.get("delayMax"));
+			int delayCompare2 = Integer.parseInt(jedis.get("delayCompare2"));
+			int beforeCompare2 = Integer.parseInt(jedis.get("beforeCompare2"));
+			int delayMax2 = Integer.parseInt(jedis.get("delayMax2"));
+			int before =  Integer.parseInt(jedis.get("before"));
+
+
+			jedis.close();
+
+			this.setMode(mode);
+			this.setModeTime(modeTime);
+			this.setDelayCompare(delayCompare);
+			this.setBeforeCompare(beforeCompare);
+			this.setDelayMax(delayMax);
+			this.setBeforeCompare2(beforeCompare2);
+			this.setDelayCompare2(delayCompare2);
+			this.setDelayMax2(delayMax2);
+			this.setBefore(before);
+
+		} catch (Exception e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+
 	public void readPostFlowers() {
 		personalPackets.clear(); // 清空
-		// readLineFile("personredpacket_time.txt"); // 读取花信息，来源于维健结果
 		if(userIndex == 1)
 			readLineFile("//root//steal//getflowers//flowers_to_post.txt");
 		else
@@ -63,13 +158,13 @@ public class HandleSteal {
 			deleteConflict2();
 	}
 
+
 	public void run() {
 		Date now = new Date();// 当前时间，用于判断花朵是否可以收获
 		//SimpleDateFormat format = new SimpleDateFormat("yyyyMMdd:HHmmss SSS");
 		SimpleDateFormat formatLog = new SimpleDateFormat("HHmmss SSS");
 		String exeStr = "";
 		String httpPostResult = "";
-		//String endDateStr = "";
 		String content = "";
 		String printStr = "";
 
@@ -93,10 +188,12 @@ public class HandleSteal {
 			// 新逻辑，只取第一个
 			PersonalPacket personalPacket = personalPackets.get(0);
 
+			exeBefore = before;
+
 			if(mode == 2 ) //模式2，无保护及有保护不一样时间
 			{
 				if(personalPacket.getNickName().contains("Y-"))
-					exeBefore = exeBefore + modeTime;
+					exeBefore = before + modeTime;
 			}
 
 			if (now.getTime() < personalPacket.getEnDate().getTime()
@@ -123,9 +220,27 @@ public class HandleSteal {
 					personalPackets.remove(0);
 					return;
 				}
-				//delay 在 270(1255) - 450列入参考范围
-				if(dely >= delayCompare && dely <= 450)
-					exeBefore = (dely - delayCompare) / 2 + beforeCompare;
+
+				if(mode == 1) {
+					//delay 在 270(1255) - 450列入参考范围
+					if (dely >= delayCompare && dely <= delayMax)
+						before = ((int) dely - delayCompare) / 2 + beforeCompare;
+				}
+				else{
+					//delay 在 480(1275) - 600列入参考范围
+					if(dely >= delayCompare2 && dely <= delayMax2)
+						before = ((int)dely - delayCompare2) / 2 + beforeCompare2;
+
+				}
+
+				try { //无论结果如何，把下一次before写入数据库
+					Jedis jedis = new Jedis("localhost", 6379);
+					jedis.select(2);
+					jedis.set("before",String.valueOf(before));
+				} catch (Exception e) {
+					// TODO: handle exception
+					e.printStackTrace();
+				}
 
 				personalPackets.remove(0);
 			}
@@ -230,7 +345,6 @@ public class HandleSteal {
 
 		System.out.println("flower after delete conflic:" + personalPackets.size());
 	}
-
 
 	public void deleteConflict2() {
 		System.out.println("flower before delete conflic:" + personalPackets.size());
